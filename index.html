@@ -1,0 +1,322 @@
+<!doctype html><html lang="ja"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-title" content="KoBoTrade">
+<title>KoBoTrade</title>
+<style>
+body{margin:0;background:#f5f7fa;color:#13243a;font-family:-apple-system,BlinkMacSystemFont,"Noto Sans JP",sans-serif}
+.app{max-width:480px;margin:auto;min-height:100vh;padding-bottom:70px}header{padding:24px 20px 12px;font-size:26px;font-weight:800}
+main{padding:0 16px}.subtitle{font-weight:800;margin:14px 4px}.card{background:#fff;border:1px solid #e5e7eb;border-radius:16px;padding:0 16px;margin:10px 0}
+.row{padding:16px 0;border-bottom:1px solid #e5e7eb}.row:last-child{border:0}.top{display:flex;justify-content:space-between}.name{font-weight:800}.pct{font-weight:700}
+.status{margin-top:5px}.wait{color:#6b7280}.buy{color:#16845a;font-weight:800}.near{font-size:13px;color:#16845a;margin-top:4px}
+table{width:100%;border-collapse:collapse}th,td{padding:14px 4px;border-bottom:1px solid #e5e7eb}th{font-size:12px;color:#6b7280}th:nth-child(2),td:nth-child(2){text-align:center}th:nth-child(3),td:nth-child(3){text-align:right}
+.primary{width:100%;border:0;border-radius:12px;padding:13px;background:#13243a;color:#fff;font-weight:700;margin-top:14px}.danger{background:#fff;color:#b42318;border:1px solid #e0b8b2}
+.setting-row{display:flex;justify-content:space-between;align-items:center;min-height:52px;border-bottom:1px solid #e5e7eb}.setting-row:last-child{border:0}.setting-label,.setting-value{white-space:nowrap}.setting-label{font-weight:600}.setting-value{color:#6b7280}.on{color:#16845a;font-weight:700}
+.nav{position:fixed;bottom:0;left:0;right:0;max-width:480px;margin:auto;background:#fff;border-top:1px solid #e5e7eb;display:grid;grid-template-columns:repeat(4,1fr);padding:8px}.nav button{border:0;background:none;color:#6b7280}.nav button.active{color:#13243a;font-weight:800}
+.modal{position:fixed;inset:0;background:#0006;display:none;align-items:flex-end}.modal.open{display:flex}.sheet{width:100%;max-width:480px;margin:auto;background:#fff;border-radius:20px 20px 0 0;padding:20px;box-sizing:border-box}.close{float:right;border:0;background:none;font-size:22px}
+label{display:block;font-size:13px;color:#6b7280;margin:13px 0 6px}input{width:100%;padding:12px;border:1px solid #d1d5db;border-radius:10px;font-size:16px;box-sizing:border-box}
+</style>
+<script id="kobotrade_v181_notification">
+async function kobotradeRequestNotificationPermission_v181() {
+  if (!("Notification" in window)) {
+    return { ok:false, state:"unsupported" };
+  }
+  if (Notification.permission === "granted") {
+    return { ok:true, state:"granted" };
+  }
+  const state = await Notification.requestPermission();
+  return { ok: state === "granted", state };
+}
+function kobotradeTestNotification_v181() {
+  if (!("Notification" in window)) {
+    alert("通知機能はこの環境では利用できません。");
+    return;
+  }
+  if (Notification.permission !== "granted") {
+    alert("通知許可: " + Notification.permission);
+    return;
+  }
+  try {
+    new Notification("KoBoTrade テスト通知", {
+      body:"KoBoTradeの通知テストです。"
+    });
+  } catch(e) {
+    alert("通知テスト失敗: " + e.message);
+  }
+}
+async function kobotradeRunNotificationTest_v181() {
+  const r = await kobotradeRequestNotificationPermission_v181();
+  if (r.ok) {
+    kobotradeTestNotification_v181();
+  } else {
+    alert("通知許可: " + r.state);
+  }
+}
+</script>
+
+
+<script id="kobotrade_v19_twelvedata">
+async function kobotradeV19GetPrice(symbol, apiKey) {
+  const url = "https://api.twelvedata.com/price?symbol=" +
+    encodeURIComponent(symbol) + "&apikey=" + encodeURIComponent(apiKey);
+  const res = await fetch(url);
+  const data = await res.json();
+  if (!res.ok || data.status === "error" || data.code) {
+    throw new Error(data.message || ("HTTP " + res.status));
+  }
+  const price = Number(data.price);
+  if (!Number.isFinite(price)) throw new Error("価格データが取得できませんでした");
+  return price;
+}
+function kobotradeV19SaveKey(key) {
+  sessionStorage.setItem("kobotrade_v19_td_key", key);
+}
+function kobotradeV19LoadKey() {
+  return sessionStorage.getItem("kobotrade_v19_td_key") || "";
+}
+async function kobotradeV19RefreshPrice(symbol, outputId) {
+  const out = document.getElementById(outputId);
+  const key = kobotradeV19LoadKey();
+  if (!key) { if(out) out.textContent="API Key未設定"; return null; }
+  if(out) out.textContent="取得中…";
+  try {
+    const p = await kobotradeV19GetPrice(symbol, key);
+    if(out) out.textContent="$"+p.toFixed(2)+"（"+new Date().toLocaleTimeString("ja-JP")+"）";
+    return p;
+  } catch(e) {
+    if(out) out.textContent="取得失敗: "+e.message;
+    return null;
+  }
+}
+</script>
+<script id="kobotrade_v191_price_bridge">
+function kobotradeV191FindCurrentPriceInputs(){return Array.from(document.querySelectorAll("input")).filter(function(el){var m=[el.id||"",el.name||"",el.placeholder||"",el.getAttribute("aria-label")||""].join(" ").toLowerCase();return /現在株価|現在価格|current.?price|market.?price|currentprice/.test(m);});}
+function kobotradeV191SetCurrentPrice(p){var a=kobotradeV191FindCurrentPriceInputs();if(!a.length)return false;var e=a[0],set=Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,"value").set;set.call(e,String(p));e.dispatchEvent(new Event("input",{bubbles:true}));e.dispatchEvent(new Event("change",{bubbles:true}));return true;}
+async function kobotradeV191UseTwelveDataForCurrentPrice(sym){var k=kobotradeV19LoadKey();if(!k){alert("Twelve Data API Keyを先に設定してください。");return;}try{var p=await kobotradeV19GetPrice(sym,k);if(!kobotradeV191SetCurrentPrice(p)){alert("株価は取得できましたが、既存の「現在株価」入力欄を認識できませんでした。\n取得価格: $"+p.toFixed(2));return;}alert("現在株価を自動入力しました。\n$"+p.toFixed(2));}catch(e){alert("株価取得失敗: "+e.message);}}
+</script>
+
+<script id="kobotrade_v192_direct_price">
+window.KoBoTradeV192 = window.KoBoTradeV192 || {prices:{},latest:null};
+
+function kobotradeV192SetPrice(symbol,price){
+  const p=Number(price);
+  if(!Number.isFinite(p)) throw new Error("無効な株価です");
+  window.KoBoTradeV192.prices[symbol]=p;
+  window.KoBoTradeV192.latest={symbol:symbol,price:p,at:Date.now()};
+  window.dispatchEvent(new CustomEvent("kobotrade:price-updated",{detail:{symbol:symbol,price:p}}));
+  return p;
+}
+function kobotradeV192GetPrice(symbol){
+  return window.KoBoTradeV192.prices[symbol] ?? null;
+}
+async function kobotradeV192FetchAndSetPrice(symbol){
+  const key=kobotradeV19LoadKey();
+  if(!key){alert("Twelve Data API Keyを先に設定してください。");return null;}
+  try{
+    const price=await kobotradeV19GetPrice(symbol,key);
+    kobotradeV192SetPrice(symbol,price);
+    return price;
+  }catch(e){alert("株価取得失敗: "+e.message);return null;}
+}
+async function kobotradeV192TestDirectPrice(symbol){
+  const price=await kobotradeV192FetchAndSetPrice(symbol);
+  if(price==null)return;
+  alert("Twelve Data → KoBoTrade の直接受け渡し成功！\n\n銘柄: "+symbol+
+        "\n現在価格: $"+price.toFixed(2)+
+        "\n\n既存の判定ロジックは変更していません。");
+}
+</script>
+<script id="kobotrade_v20_core">
+window.KoBoTradeV20=window.KoBoTradeV20||{symbols:["AAPL","AMZN","COST","GOOG","MAR","MSFT","PM"],prices:{},updatedAt:{},keyStorage:"kobotrade_v20_twelvedata_key"};
+function kobotradeV20SaveApiKey(k){k=(k||"").trim();if(!k)throw Error("API Keyが空です");localStorage.setItem(KoBoTradeV20.keyStorage,k)}
+function kobotradeV20GetApiKey(){return localStorage.getItem(KoBoTradeV20.keyStorage)||""}
+function kobotradeV20ClearApiKey(){localStorage.removeItem(KoBoTradeV20.keyStorage)}
+async function kobotradeV20FetchPrice(sym){const k=kobotradeV20GetApiKey();if(!k)throw Error("Twelve Data API Keyが未設定です");const u="https://api.twelvedata.com/price?symbol="+encodeURIComponent(sym)+"&apikey="+encodeURIComponent(k);const r=await fetch(u),d=await r.json();if(!r.ok||d.status==="error"||d.code)throw Error(d.message||("HTTP "+r.status));const p=Number(d.price);if(!Number.isFinite(p))throw Error("価格データが取得できませんでした");KoBoTradeV20.prices[sym]=p;KoBoTradeV20.updatedAt[sym]=Date.now();window.dispatchEvent(new CustomEvent("kobotrade:v20-price-updated",{detail:{symbol:sym,price:p}}));return p}
+async function kobotradeV20RefreshAll(){const o={};for(const sym of KoBoTradeV20.symbols){try{o[sym]={ok:true,price:await kobotradeV20FetchPrice(sym)}}catch(e){o[sym]={ok:false,error:e.message}}}return o}
+</script><style id="kobotrade-v20-style">#kobotrade-v19-price-panel,#kobotrade-v191-auto-fill-test,#kobotrade-v192-direct-test{display:none!important}</style><style id="kobotrade-v20-current-price-input-removal">
+input[placeholder*="現在株価"],input[placeholder*="現在価格"],input[name*="currentPrice" i],input[id*="currentPrice" i],input[name*="current_price" i],input[id*="current_price" i]{display:none!important}
+</style>
+<style id="kobotrade-v20-final-current-price-cleanup">
+#ec{display:none!important}
+</style>
+<script id="kobotrade-v20-symbol-resolver">
+window.kobotradeV20ResolveSymbol=function(name){const k=String(name||"").trim().toLowerCase();const m={"microsoft":"MSFT","microsoft corporation":"MSFT","amazon":"AMZN","amazon.com":"AMZN","amazon.com, inc.":"AMZN","apple":"AAPL","apple inc.":"AAPL","costco":"COST","costco wholesale":"COST","alphabet":"GOOG","alphabet inc.":"GOOG","google":"GOOG","marriott":"MAR","marriott international":"MAR","philip morris":"PM","philip morris international":"PM"};return m[k]||String(name||"").trim().toUpperCase()};
+</script>
+</head><body><div class="app"><header>KoBoTrade</header><main id="content"></main>
+<nav class="nav"><button onclick="tab='home';render()">ホーム</button><button onclick="tab='holdings';render()">保有銘柄</button><button onclick="tab='settings';render()">設定</button><button onclick="tab='tests';render()">テスト</button></nav></div>
+<div id="modal" class="modal"><div class="sheet"><button class="close" onclick="closeModal()">×</button><div id="modalBody"></div></div></div>
+<script>
+const base={holdings:[
+{name:"Microsoft",shares:8,avg:466,current:498,upActive:false,lastUpPurchasePct:null,downActive:false,lastDownPurchasePct:null,prevPct:null,lastDecisionPct:null,lastDecisionBuy:false,lastDecisionMsg:""},
+{name:"Amazon",shares:10,avg:228.82,current:273,upActive:false,lastUpPurchasePct:null,downActive:false,lastDownPurchasePct:null,prevPct:null,lastDecisionPct:null,lastDecisionBuy:false,lastDecisionMsg:""}],
+rules:{downPct:15,downContinue:true,downContinuePct:5,upPct:20,continue:true,continuePct:20,notify:true}};
+let state=JSON.parse(localStorage.getItem("koboState")||"null")||base,tab="home";
+state.rules=Object.assign({downPct:15,downContinue:true,downContinuePct:5,upPct:20,continue:true,continuePct:20,notify:true},state.rules||{});
+if(Array.isArray(state.rules.down)){state.rules.downPct=state.rules.downPct??state.rules.down[0];delete state.rules.down}
+state.holdings.forEach(h=>{h.upActive=!!h.upActive;h.lastUpPurchasePct=h.lastUpPurchasePct??null;h.downActive=!!h.downActive;h.lastDownPurchasePct=h.lastDownPurchasePct??null;h.prevPct=h.prevPct??null;h.lastDecisionPct=h.lastDecisionPct??null;h.lastDecisionBuy=!!h.lastDecisionBuy;h.lastDecisionMsg=h.lastDecisionMsg??""});
+function save(){localStorage.setItem("koboState",JSON.stringify(state))}
+function pct(h){return(h.current/h.avg-1)*100} function f(x){return Number(x).toFixed(2)}
+
+function evaluate(h){
+ const raw=pct(h);
+ const p=Math.abs(raw)<0.0001?0:Math.round(raw*100)/100;
+ const r=state.rules;
+ if(h.lastDecisionPct!==null && Math.abs(p-h.lastDecisionPct)<0.0001){return{p,buy:!!h.lastDecisionBuy,msg:h.lastDecisionMsg||"待つ"}}
+ let buy=false,msg="待つ";
+ if(p<0){
+   if(r.downContinue&&h.downActive&&h.lastDownPurchasePct!==null && p>=h.lastDownPurchasePct+r.downContinuePct-0.0001){
+     h.downActive=false; h.lastDownPurchasePct=null;
+   }
+   if(!h.downActive){
+     if((h.prevPct===null ? Math.abs(p+r.downPct)<=0.0001 : h.prevPct>-r.downPct+0.0001 && p<=-r.downPct+0.0001)){
+       buy=true; msg=`−${r.downPct}%到達`;
+       if(r.downContinue){h.downActive=true;h.lastDownPurchasePct=p;}
+     }
+   }else if(r.downContinue){
+     const next=h.lastDownPurchasePct-r.downContinuePct;
+     if((h.prevPct===null||h.prevPct>next) && p<=next+0.0001){
+       buy=true; msg=`−${r.downContinuePct}%継続購入`; h.lastDownPurchasePct=p;
+     }
+   }
+ }else{
+   if(r.continue&&h.upActive&&h.lastUpPurchasePct!==null&&p<=h.lastUpPurchasePct-r.continuePct+0.0001){
+     h.upActive=false;h.lastUpPurchasePct=null;
+   }
+   if(!h.upActive){
+     if((h.prevPct===null||h.prevPct<r.upPct)&&p>=r.upPct-0.0001){
+       buy=true;msg=`＋${r.upPct}%到達`;
+       if(r.continue){h.upActive=true;h.lastUpPurchasePct=p;}
+     }
+   }else if(r.continue){
+     const next=h.lastUpPurchasePct+r.continuePct;
+     if((h.prevPct===null||h.prevPct<next)&&p>=next-0.0001){
+       buy=true;msg=`＋${r.continuePct}%継続購入`;h.lastUpPurchasePct=p;
+     }
+   }
+ }
+ h.lastDecisionPct=p;h.lastDecisionBuy=buy;h.lastDecisionMsg=msg;
+ return{p,buy,msg}
+}
+function near(h,p){
+ const r=state.rules;
+ if(p<0){
+   if(r.downContinue&&h.downActive&&h.lastDownPurchasePct!==null){let n=h.lastDownPurchasePct-r.downContinuePct;if(p>n)return`−${f(Math.abs(n))}%まであと${f(p-n)}%`}
+   let n=-r.downPct;return p>n?`−${f(r.downPct)}%まであと${f(p-n)}%`:"下落購入条件到達済み"
+ }
+ if(r.continue&&h.upActive&&h.lastUpPurchasePct!==null){let n=h.lastUpPurchasePct+r.continuePct;if(p<n)return`＋${f(n)}%まであと${f(n-p)}%`}
+ return p<r.upPct?`＋${f(r.upPct)}%まであと${f(r.upPct-p)}%`:"上昇購入条件到達済み"
+}
+function home(){return`<div class="subtitle">今日の判定</div><div class="card">${state.holdings.map(h=>{let e=evaluate(h);return`<div class="row"><div class="top"><span class="name">${h.name}</span><span class="pct">${e.p>=0?"+":""}${f(e.p)}%</span></div><div class="status ${e.buy?"buy":"wait"}">${e.buy?"買う":"待つ"}</div><div class="near">${e.buy?e.msg:near(h,e.p)}</div></div>`}).join("")}</div>`}
+function holdings(){return`<div class="subtitle">保有銘柄</div><div class="card"><table><tr><th>銘柄</th><th>株数</th><th>現在株価</th><th>評価損益</th></tr>${state.holdings.map((h,i)=>`<tr onclick="editHolding(${i})"><td>${h.name}</td><td>${h.shares}株</td><td>${Number.isFinite(h.current)?f(h.current):"未取得"}</td><td>${pct(h)>=0?"+":""}${f(pct(h))}%</td></tr>`).join("")}</table></div><button class="primary" onclick="kobotradeV20UpdateHoldingsPrices()">株価を自動更新</button><button class="primary" onclick="addHolding()">＋ 銘柄を追加</button>`}
+function settings(){let r=state.rules;return`<div class="subtitle">◼️ 買いルール</div><div class="card">
+<div class="setting-row" onclick="edit('downPct')"><span class="setting-label">下落購入開始</span><span class="setting-value">−${r.downPct}% ›</span></div>
+<div class="setting-row" onclick="editBool('downContinue')"><span class="setting-label">下落購入継続</span><span class="setting-value ${r.downContinue?'on':''}">${r.downContinue?'ON':'OFF'} ›</span></div>
+<div class="setting-row" onclick="edit('downContinuePct')"><span class="setting-label">下落継続率</span><span class="setting-value">−${r.downContinuePct}% ›</span></div>
+<div class="setting-row" onclick="edit('upPct')"><span class="setting-label">上昇購入開始</span><span class="setting-value">＋${r.upPct}% ›</span></div>
+<div class="setting-row" onclick="editBool('continue')"><span class="setting-label">上昇購入継続</span><span class="setting-value ${r.continue?'on':''}">${r.continue?'ON':'OFF'} ›</span></div>
+<div class="setting-row" onclick="edit('continuePct')"><span class="setting-label">上昇継続率</span><span class="setting-value">＋${r.continuePct}% ›</span></div></div>
+<div class="subtitle">◼️ スマホ通知</div><div class="card"><div class="setting-row" onclick="editBool('notify')"><span class="setting-label">通知</span><span class="setting-value ${r.notify?'on':''}">${r.notify?'ON':'OFF'} ›</span></div></div>`}
+function edit(k){let map={downPct:["下落購入開始",state.rules.downPct],downContinuePct:["下落継続率",state.rules.downContinuePct],upPct:["上昇購入開始",state.rules.upPct],continuePct:["上昇継続率",state.rules.continuePct]};let x=map[k];modalBody.innerHTML=`<h2>${x[0]}</h2><label>数値</label><input id="val" type="number" min="0.01" step="0.01" value="${x[1]}"><button class="primary" onclick="saveEdit('${k}')">保存</button>`;modal.classList.add("open")}
+function saveEdit(k){let v=+val.value;if(v<=0)return alert("0より大きい数値を入力してください");state.rules[k]=v;save();closeModal();render()}
+function editBool(k){modalBody.innerHTML=`<h2>${k=="continue"?"上昇購入継続":k=="downContinue"?"下落購入継続":"通知"}</h2><input id="bool" type="checkbox" ${state.rules[k]?"checked":""}><button class="primary" onclick="state.rules['${k}']=bool.checked;save();closeModal();render()">保存</button>`;modal.classList.add("open")}
+function addHolding(){modalBody.innerHTML=`<h2>保有銘柄を追加</h2><label>追加銘柄</label><input id="nn"><label>追加株数</label><input id="ns" type="number" value="1"><label>追加購入価格</label><input id="np" type="number" step=".01"><button class="primary" onclick="doAdd()">追加</button>`;modal.classList.add("open")}
+function doAdd(){let n=nn.value.trim(),s=+ns.value,p=+np.value;if(!n||s<=0||p<=0)return alert("3項目を入力してください");let h=state.holdings.find(x=>x.name.toLowerCase()==n.toLowerCase());if(h){let t=h.shares+s;h.avg=(h.avg*h.shares+p*s)/t;h.shares=t;h.current=p}else state.holdings.push({name:n,shares:s,avg:p,current:p,upActive:false,lastUpPurchasePct:null,downActive:false,lastDownPurchasePct:null,prevPct:null,lastDecisionPct:null,lastDecisionBuy:false,lastDecisionMsg:""});save();closeModal();render()}
+function editHolding(i){let h=state.holdings[i];modalBody.innerHTML=`<h2>${h.name}</h2><div class="row">取得単価　${f(h.avg)}</div><div class="row">保有株数　${h.shares}株</div><div class="row">現在株価　<b>${Number.isFinite(h.current)?"$"+f(h.current):"未取得"}</b></div><div class="row">評価損益　${pct(h)>=0?"+":""}${f(pct(h))}%</div><p class="small">現在株価はTwelve Dataから自動取得されます。</p><button class="primary" onclick="kobotradeV20UpdateOneHolding(${i})">この銘柄の株価を更新</button><button class="primary danger" onclick="del(${i})">保有銘柄から削除</button>`;modal.classList.add("open")}
+async function kobotradeV20UpdateOneHolding(i){let h=state.holdings[i];try{let symbol=kobotradeV20ResolveSymbol(h.name);let p=await kobotradeV20FetchPrice(symbol);h.current=p;h.symbol=symbol;save();closeModal();render();}catch(e){alert("株価取得失敗: "+e.message)}}
+async function kobotradeV20UpdateHoldingsPrices(){if(!kobotradeV20GetApiKey()){alert("Twelve Data API Keyを先に設定してください。");return;}let failed=[];for(const h of state.holdings){try{let symbol=kobotradeV20ResolveSymbol(h.name);h.current=await kobotradeV20FetchPrice(symbol);h.symbol=symbol}catch(e){failed.push(h.name+"（"+kobotradeV20ResolveSymbol(h.name)+"）")}}save();render();if(failed.length)alert("取得できなかった銘柄: "+failed.join(", "));else alert("保有銘柄の株価をすべて更新しました。")}
+function upd(i){return kobotradeV20UpdateOneHolding(i)}
+function del(i){if(confirm(state.holdings[i].name+"を削除しますか？")){state.holdings.splice(i,1);save();closeModal();render()}}
+function closeModal(){modal.classList.remove("open")}
+
+function tests(){return`<div class="subtitle">開発用：自動テスト</div><div class="card"><div class="row">下落・上昇の判定ロジックを自動検証します。通常の保有銘柄・設定データは変更しません。</div></div><button class="primary" onclick="runAutoTests()">自動テストを実行</button><div id="testResults" style="margin-top:12px"></div>`}
+function runAutoTests(){
+ const original=JSON.parse(JSON.stringify(state)),rows=[];
+ const rules={downPct:15,downContinue:true,downContinuePct:5,upPct:20,continue:true,continuePct:20,notify:true};
+ const mk=p=>({name:"TEST",shares:1,avg:466,current:466*(1+p/100),upActive:false,lastUpPurchasePct:null,downActive:false,lastDownPurchasePct:null,prevPct:null,lastDecisionPct:null,lastDecisionBuy:false,lastDecisionMsg:""});
+ const check=(name,a,e)=>rows.push({name,a,e,ok:a===e});
+ function fresh(p){state={holdings:[],rules:JSON.parse(JSON.stringify(rules))};return evaluate(mk(p)).msg}
+ [[-14.99,"待つ"],[-15,"−15%到達"],[-15.01,"待つ"]].forEach(([p,e])=>check(`下落初回 ${p}%`,fresh(p),e));
+ state={holdings:[],rules:JSON.parse(JSON.stringify(rules))};let h=mk(-15),e=evaluate(h);check("下落 −15%初回",e.msg,"−15%到達");h.prevPct=-15;h.current=466*.8;e=evaluate(h);check("下落 −20%継続",e.msg,"−5%継続購入");h.prevPct=-20;h.current=466*.75;e=evaluate(h);check("下落 −25%継続",e.msg,"−5%継続購入");h.prevPct=-25;h.current=466*.77;e=evaluate(h);check("下落 −23%押し目",e.msg,"待つ");h.prevPct=-23;h.current=466*.75;e=evaluate(h);check("下落 −25%再到達",e.msg,"待つ");
+ state={holdings:[],rules:JSON.parse(JSON.stringify(rules))};h=mk(-15);e=evaluate(h);h.prevPct=-15;h.current=466*.8;e=evaluate(h);h.prevPct=-20;h.current=466*.85;e=evaluate(h);check("下落 −15%まで回復で待つ",e.msg,"待つ");
+ state.rules.downContinue=false;h=mk(-15);e=evaluate(h);check("下落継続OFF −15%",e.msg,"−15%到達");h.prevPct=-15;h.current=466*.8;e=evaluate(h);check("下落継続OFF −20%",e.msg,"待つ");
+ state={holdings:[],rules:JSON.parse(JSON.stringify(rules))};h=mk(20);e=evaluate(h);check("上昇 ＋20%初回",e.msg,"＋20%到達");e=evaluate(h);check("同一価格で再評価",e.msg,"＋20%到達");h.prevPct=20;h.current=466*1.4;e=evaluate(h);check("上昇 ＋40%継続",e.msg,"＋20%継続購入");h.prevPct=40;h.current=466*1.3;e=evaluate(h);check("上昇 ＋30%押し目",e.msg,"待つ");h.prevPct=30;h.current=466*1.4;e=evaluate(h);check("上昇 ＋40%再到達",e.msg,"待つ");h.prevPct=40;h.current=466*1.6;e=evaluate(h);check("上昇 ＋60%継続",e.msg,"＋20%継続購入");
+ state={holdings:[],rules:JSON.parse(JSON.stringify(rules))};state.rules.continuePct=10;h=mk(20);e=evaluate(h);check("上昇率変更 ＋20%",e.msg,"＋20%到達");h.prevPct=20;h.current=466*1.3;e=evaluate(h);check("上昇率変更 ＋30%",e.msg,"＋10%継続購入");
+ state=original;const ok=rows.filter(x=>x.ok).length,ng=rows.length-ok;document.getElementById("testResults").innerHTML=`<div class="card"><div class="row"><b>自動テスト結果</b><br>OK ${ok} / NG ${ng} / 全${rows.length}件</div>${rows.map(x=>`<div class="row"><span class="${x.ok?"buy":"wait"}">${x.ok?"OK":"NG"}</span> ${x.name}<br><span class="small">実際：${x.a} / 期待：${x.e}</span></div>`).join("")}</div>`
+}
+function render(){content.innerHTML=tab=="home"?home():tab=="holdings"?holdings():tab=="settings"?settings():tests();document.querySelectorAll(".nav button").forEach((b,i)=>b.classList.toggle("active",["home","holdings","settings","tests"][i]==tab))}
+render();
+
+/* KoBoTrade v1.8 notification helpers */
+async function kobotradeRequestNotificationPermission() {
+  if (!("Notification" in window)) return {ok:false,state:"unsupported"};
+  if (Notification.permission === "granted") return {ok:true,state:"granted"};
+  const permission = await Notification.requestPermission();
+  return {ok:permission === "granted",state:permission};
+}
+function kobotradeShowNotification(title, body) {
+  if (!("Notification" in window) || Notification.permission !== "granted") return false;
+  try { new Notification(title,{body}); return true; }
+  catch(e) { console.warn("KoBoTrade notification failed:",e); return false; }
+}
+function kobotradeTestNotification() {
+  return kobotradeShowNotification("KoBoTrade テスト通知","通知機能は正常に動作しています。");
+}
+
+</script>
+<div id="kobotrade-v18-notification-test" style="margin:16px 0;">
+<button type="button" onclick="kobotradeRequestNotificationPermission().then(function(r){
+if(r.ok){kobotradeTestNotification();}else{alert('通知許可: '+r.state);}
+}).catch(function(e){alert('通知テスト失敗: '+e.message);});">通知をテスト</button>
+</div>
+
+<section id="kobotrade-v181-test-notification" style="margin:20px 0;padding:16px;border:1px solid #ccc;border-radius:12px;">
+  <h3 style="margin-top:0;">通知テスト</h3>
+  <p style="margin:8px 0;">iPhoneの通知許可と通知センターへの表示を確認します。</p>
+  <button type="button" onclick="kobotradeRunNotificationTest_v181()"
+    style="width:100%;padding:12px;font-size:16px;border-radius:10px;">
+    通知をテスト
+  </button>
+</section>
+
+<section id="kobotrade-v19-price-panel" style="margin:20px 0;padding:16px;border:1px solid #ccc;border-radius:12px;">
+<h3 style="margin-top:0;">米国株 現在株価（Twelve Data）</h3>
+<p style="font-size:13px;color:#555;">API Keyはこのブラウザのセッション中だけ保持します。</p>
+<input id="kobotrade-v19-api-key" type="password" autocomplete="off" placeholder="Twelve Data API Key"
+style="width:100%;box-sizing:border-box;padding:10px;border:1px solid #ccc;border-radius:8px;">
+<button type="button" onclick="kobotradeV19SaveKey(document.getElementById('kobotrade-v19-api-key').value.trim());alert('API Keyを設定しました');"
+style="margin-top:8px;padding:10px;width:100%;border-radius:8px;">API Keyを設定</button>
+<div style="margin-top:14px;">
+<div style="margin:10px 0;"><b>AAPL</b>　<span id="kobotrade-v19-AAPL-price">未取得</span> <button type="button" onclick="kobotradeV19RefreshPrice('AAPL','kobotrade-v19-AAPL-price')">更新</button></div><div style="margin:10px 0;"><b>AMZN</b>　<span id="kobotrade-v19-AMZN-price">未取得</span> <button type="button" onclick="kobotradeV19RefreshPrice('AMZN','kobotrade-v19-AMZN-price')">更新</button></div><div style="margin:10px 0;"><b>COST</b>　<span id="kobotrade-v19-COST-price">未取得</span> <button type="button" onclick="kobotradeV19RefreshPrice('COST','kobotrade-v19-COST-price')">更新</button></div><div style="margin:10px 0;"><b>GOOG</b>　<span id="kobotrade-v19-GOOG-price">未取得</span> <button type="button" onclick="kobotradeV19RefreshPrice('GOOG','kobotrade-v19-GOOG-price')">更新</button></div><div style="margin:10px 0;"><b>MAR</b>　<span id="kobotrade-v19-MAR-price">未取得</span> <button type="button" onclick="kobotradeV19RefreshPrice('MAR','kobotrade-v19-MAR-price')">更新</button></div><div style="margin:10px 0;"><b>MSFT</b>　<span id="kobotrade-v19-MSFT-price">未取得</span> <button type="button" onclick="kobotradeV19RefreshPrice('MSFT','kobotrade-v19-MSFT-price')">更新</button></div><div style="margin:10px 0;"><b>PM</b>　<span id="kobotrade-v19-PM-price">未取得</span> <button type="button" onclick="kobotradeV19RefreshPrice('PM','kobotrade-v19-PM-price')">更新</button></div></div></section>
+<div id="kobotrade-v191-auto-fill-test" style="margin-top:16px;padding:12px;border:1px solid #ddd;border-radius:10px;"><b>現在株価へ自動入力（テスト）</b><p style="font-size:13px;color:#555;">AAPLの取得価格を既存の「現在株価」欄へ自動入力します。</p><button type="button" onclick="kobotradeV191UseTwelveDataForCurrentPrice('AAPL')" style="width:100%;padding:10px;border-radius:8px;">AAPLを自動入力</button></div>
+<section id="kobotrade-v192-direct-test" style="margin:16px 0;padding:14px;border:1px solid #ddd;border-radius:12px;">
+<b>v1.9.2 株価→判定エンジン受け渡しテスト</b>
+<p style="font-size:13px;color:#555;">AAPLの価格をTwelve Dataから取得し、既存の入力欄を経由せずKoBoTrade内部へ渡します。</p>
+<button type="button" onclick="kobotradeV192TestDirectPrice('AAPL')" style="width:100%;padding:11px;border-radius:8px;">
+AAPLを取得してKoBoTradeへ渡す
+</button>
+</section>
+<section id="kobotrade-v20-ui" style="margin:20px 0;padding:16px;border:1px solid #ccc;border-radius:12px">
+<h3 style="margin-top:0">KoBoTrade V2.0｜米国株自動株価</h3>
+<p id="kobotrade-v20-status" style="font-size:13px;color:#555">初回のみTwelve Data API Keyを設定してください。</p>
+<div id="kobotrade-v20-key-area">
+<input id="kobotrade-v20-api-key" type="password" autocomplete="off" placeholder="Twelve Data API Key" style="width:100%;box-sizing:border-box;padding:10px">
+<button type="button" onclick="kobotradeV20SetupKey()" style="margin-top:8px;padding:10px;width:100%">API Keyを保存</button>
+</div>
+<div id="kobotrade-v20-main" style="display:none">
+<button type="button" onclick="kobotradeV20RefreshAllUI()" style="padding:10px;width:100%">株価を更新</button>
+<div id="kobotrade-v20-prices" style="margin-top:14px"></div>
+<button type="button" onclick="kobotradeV20ForgetKey()" style="margin-top:12px;padding:8px;width:100%">API Keyを削除</button>
+</div></section>
+<script id="kobotrade-v20-ui-script">
+function kobotradeV20Render(){const b=document.getElementById("kobotrade-v20-prices");if(!b)return;b.innerHTML=KoBoTradeV20.symbols.map(s=>{const p=KoBoTradeV20.prices[s],t=KoBoTradeV20.updatedAt[s];return '<div style="margin:9px 0"><b>'+s+'</b>　<span>'+(Number.isFinite(p)?"$"+p.toFixed(2)+(t?"（"+new Date(t).toLocaleTimeString("ja-JP")+"）":""):"未取得")+'</span></div>'}).join("")}
+function kobotradeV20SetupKey(){try{kobotradeV20SaveApiKey(document.getElementById("kobotrade-v20-api-key").value);document.getElementById("kobotrade-v20-api-key").value="";kobotradeV20ShowMain();document.getElementById("kobotrade-v20-status").textContent="API Keyを保存しました。次回から再入力不要です。"}catch(e){alert(e.message)}}
+function kobotradeV20ShowMain(){document.getElementById("kobotrade-v20-key-area").style.display="none";document.getElementById("kobotrade-v20-main").style.display="block";kobotradeV20Render()}
+function kobotradeV20ForgetKey(){kobotradeV20ClearApiKey();document.getElementById("kobotrade-v20-key-area").style.display="block";document.getElementById("kobotrade-v20-main").style.display="none";document.getElementById("kobotrade-v20-status").textContent="API Keyを削除しました。"}
+async function kobotradeV20RefreshAllUI(){const st=document.getElementById("kobotrade-v20-status");st.textContent="7銘柄の株価を取得中…";const r=await kobotradeV20RefreshAll();kobotradeV20Render();const f=Object.keys(r).filter(k=>!r[k].ok);st.textContent=f.length?"取得失敗: "+f.join(", "):"7銘柄の株価を取得しました。"}
+document.addEventListener("DOMContentLoaded",()=>{if(kobotradeV20GetApiKey()){kobotradeV20ShowMain();document.getElementById("kobotrade-v20-status").textContent="保存済みAPI Keyを使用します。再入力不要です。"}})
+</script><script id="kobotrade-v20-holdings-price-bridge">
+(function(){
+function hideCurrentPriceInputs(){document.querySelectorAll("input").forEach(function(el){var m=[el.id||"",el.name||"",el.placeholder||"",el.getAttribute("aria-label")||""].join(" ");if(/現在株価|現在価格|current.?price|market.?price/i.test(m))el.style.display="none";});}
+document.addEventListener("DOMContentLoaded",function(){hideCurrentPriceInputs();setTimeout(hideCurrentPriceInputs,500);setTimeout(hideCurrentPriceInputs,1500);});
+window.addEventListener("kobotrade:v20-price-updated",hideCurrentPriceInputs);window.addEventListener("kobotrade:v20-refresh-complete",hideCurrentPriceInputs);
+})();
+</script></body></html>
