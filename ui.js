@@ -23,7 +23,7 @@
       const sameAsLast=Number.isFinite(currentPct)&&h.lastDecisionPct!==null&&Math.abs(currentPct-Number(h.lastDecisionPct))<0.0001;
       const e=sameAsLast
         ? {p:currentPct,buy:!!h.lastDecisionBuy,msg:h.lastDecisionMsg||"待つ"}
-        : evaluate(h,false);
+        : evaluate(h,true);
       return {h,i,e};
     });
     return `<div class="home-head"><div class="subtitle">今日の判定</div></div>

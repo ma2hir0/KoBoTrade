@@ -16,7 +16,7 @@
     t("条件外は待つ",()=>{const h={avg:100,current:110,shares:1,downActive:false,lastDownPurchasePct:null,upActive:false,lastUpPurchasePct:null,prevPct:null,lastDecisionPct:null};return evaluate(h,false).buy===false});
     t("下落継続率設定",()=>state.rules.downContinuePct===5);
     t("上昇継続率設定",()=>state.rules.continuePct===20);
-    t("7銘柄管理",()=>state.holdings.length===7);
+    t("TSLA−63%は買う",()=>{const h={avg:1000,current:365.47,shares:1,downActive:false,lastDownPurchasePct:null,upActive:false,lastUpPurchasePct:null,prevPct:null,lastDecisionPct:null};const x=evaluate(h,false);return x.buy===true});
     t("株価キャッシュTTL",()=>window.kobotradeV20GetQuoteCacheInfo&&typeof window.kobotradeV20GetQuoteCacheInfo("AAPL")==="object");
     t("API Key関数",()=>typeof kobotradeV20SaveApiKey==="function"&&typeof kobotradeV20GetApiKey==="function");
     t("モーダル関数",()=>typeof openModal==="function"&&typeof closeModal==="function");
