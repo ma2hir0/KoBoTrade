@@ -1,5 +1,5 @@
 (function(){
-  const DAILY_KEY="kobotrade_daily_check_date_test_v25";
+  const DAILY_KEY="kobotrade_daily_check_date_v28";
 
   async function getRegistration(){
     try{
@@ -21,11 +21,11 @@
     try{
       const reg=await getRegistration();
       if(reg&&reg.showNotification){
-        await reg.showNotification(t,{body:b,tag:"kobotrade-buy-v25",renotify:true});
+        await reg.showNotification(t,{body:b,tag:"kobotrade-buy-v28",renotify:true});
         return true;
       }
     }catch(e){console.warn("showNotification",e)}
-    try{new Notification(t,{body:b,tag:"kobotrade-buy-v25"});return true}catch(e){return false}
+    try{new Notification(t,{body:b,tag:"kobotrade-buy-v28"});return true}catch(e){return false}
   };
 
   function todayKey(){
@@ -33,15 +33,15 @@
     const y=d.getFullYear(),m=String(d.getMonth()+1).padStart(2,"0"),day=String(d.getDate()).padStart(2,"0");
     return `${y}-${m}-${day}`;
   }
-  function isWeekday(){return true}
+  function isWeekday(){const d=new Date().getDay();return d>=1&&d<=5}
   function alreadyCheckedToday(){return localStorage.getItem(DAILY_KEY)===todayKey()}
   function markCheckedToday(){try{localStorage.setItem(DAILY_KEY,todayKey())}catch(e){}}
 
-  window.kobotradeDailyCheckStatus=function(){return {weekday:true,checked:alreadyCheckedToday(),date:todayKey()}};
+  window.kobotradeDailyCheckStatus=function(){return {weekday:isWeekday(),checked:alreadyCheckedToday(),date:todayKey()}};
 
   let running=false;
   window.kobotradeRunDailyCheck=async function(force=false){
-    if(running||(!force&&alreadyCheckedToday())||!state.rules.notify)return {ran:false,reason:!state.rules.notify?"notify_off":(!force&&alreadyCheckedToday()?"already_checked":"skip")};
+    if(running||(!force&&alreadyCheckedToday())||(!force&&!isWeekday())||!state.rules.notify)return {ran:false,reason:!state.rules.notify?"notify_off":(!force&&!isWeekday()?"weekend":(!force&&alreadyCheckedToday()?"already_checked":"skip"))};
     if(!kobotradeV20GetApiKey())return {ran:false,reason:"no_api_key"};
     running=true;
     try{
@@ -69,7 +69,7 @@
     }finally{running=false}
   };
 
-  window.kobotradeShowDailyCheckStatus=function(){return alreadyCheckedToday()?"今日のテストチェック済み":"今日のテストチェック未実施"};
+  window.kobotradeShowDailyCheckStatus=function(){if(!isWeekday())return "土日：チェック対象外";return alreadyCheckedToday()?"今日のチェック済み":"今日のチェック未実施"};
   window.kobotradeResetDailyCheckForTest=function(){try{localStorage.removeItem(DAILY_KEY);return true}catch(e){return false}};
   window.kobotradeNotificationDiagnostics=async function(){
     let sw="unsupported",scope="—";
